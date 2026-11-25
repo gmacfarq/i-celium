@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>I-celium</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>I-celium</h1>
+    <div class="actions">
+      <button id="btn-add" class="primary">+ Name an attachment</button>
+      <button id="btn-export" title="Save your map as a JSON file">Export</button>
+      <label class="button" title="Load a map from a JSON file">Import
+        <input id="file-import" type="file" accept="application/json" hidden>
+      </label>
+    </div>
+  </header>
+
+  <canvas id="field"></canvas>
+  <div id="legend"></div>
+  <div id="hint">Click the <strong>I</strong> to name the first thing you hold onto.<br>Each kind of attachment has its own cord.</div>
+
+  <aside id="panel" hidden>
+    <button id="panel-close" class="close" aria-label="Close">×</button>
+    <form id="form">
+      <h2 id="panel-title">Name an attachment</h2>
+
+      <label>What is held?
+        <input id="f-name" required maxlength="60" placeholder="e.g. being seen as competent">
+      </label>
+
+      <label>Kind of attachment (upādāna)
+        <select id="f-category"></select>
+      </label>
+      <p id="f-desc" class="desc"></p>
+
+      <label>Form
+        <select id="f-form"></select>
+      </label>
+
+      <fieldset class="tone">
+        <legend>Tone</legend>
+        <label><input type="radio" name="tone" value="craving" checked> Craving, wanting it</label>
+        <label><input type="radio" name="tone" value="aversion"> Aversion, pushing it away</label>
+      </fieldset>
+
+      <label>How tightly is it held? <span id="f-strength-out"></span>
+        <input id="f-strength" type="range" min="1" max="5" step="1" value="3">
+      </label>
+
+      <label>Notes
+        <textarea id="f-notes" rows="3" placeholder="How does it show up in the body? What does it protect?"></textarea>
+      </label>
+
+      <button type="submit" class="primary" id="f-save">Let it grow</button>
+    </form>
+
+    <section id="observe" hidden>
+      <h3>Noticing</h3>
+      <p class="muted" id="obs-count"></p>
+      <div class="row">
+        <input id="obs-note" maxlength="140" placeholder="What arose? (optional)">
+        <button id="obs-add" class="primary">I noticed it</button>
+      </div>
+      <ol id="obs-list"></ol>
+
+      <div class="row end">
+        <button id="btn-release"></button>
+        <button id="btn-delete" class="danger">Remove</button>
+      </div>
+    </section>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
