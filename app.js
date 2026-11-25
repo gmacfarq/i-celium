@@ -315,6 +315,8 @@ function setFocus(id, snap = false) {
 function updateFocusUI() {
   const bar = document.getElementById('focusbar');
   if (!bar) return;
+  // the hint and the focus bar share the row under the header
+  document.getElementById('hint').hidden = state.attachments.length > 0 || focusId !== null;
   const cat = CATEGORIES.find(c => c.id === focusId);
   bar.hidden = !cat;
   if (cat) {

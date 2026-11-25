@@ -87,11 +87,14 @@ canvas#field {
   vertical-align: -1px;
 }
 
+/* sits just under the header, clear of the cords */
 #hint {
   position: fixed;
-  left: 50%;
-  bottom: 18%;
-  transform: translateX(-50%);
+  top: 64px;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  line-height: 1.5;
   color: var(--muted);
   font-style: italic;
   text-align: center;
@@ -210,6 +213,7 @@ textarea { resize: vertical; }
   .long { display: none; }
   .short { display: inline; }
 
+  #hint { top: 52px; font-size: 14px; }
   #focusbar { top: 52px; left: 12px; right: 12px; font-size: 13px; }
   #focusbar em { font-size: 14px; }
 
