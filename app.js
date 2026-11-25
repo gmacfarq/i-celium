@@ -264,6 +264,78 @@ function resize() {
   CX = W / 2; CY = H / 2 + 10;
   R = Math.min(W, H) / 2 * 0.86;
   paintSoil();
+  setFocus(focusId, true);
+}
+
+// ---------- camera: overview of all four cords, or zoomed into one ----------
+
+// The point (in field units) at the screen centre, and the zoom factor.
+const cam = { x: 0, y: 0, z: 1 };
+let camTarget = { x: 0, y: 0, z: 1 };
+let focusId = null; // id of the cord we're zoomed into, or null for the overview
+
+// Small screens get a quiet overview (small faint dots, no labels); detail lives in the zoom.
+const isCompact = () => Math.min(W, H) < 560;
+const showDetail = () => !isCompact() || focusId !== null;
+
+function focusBounds(id) {
+  const cord = cords.find(c => c.id === id);
+  const targets = state.attachments.filter(a => a.category === id).map(targetOf);
+  // fit the attachments and the stretch of cord that reaches them, not the empty tip
+  const reach = Math.max(0.55, ...targets.map(([x, y]) => Math.hypot(x, y))) + 0.08;
+  const pts = [[0, 0], ...cord.main.filter(([x, y]) => Math.hypot(x, y) <= reach), ...targets];
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) {
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+  }
+  const pad = 0.1;
+  return { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+}
+
+function setFocus(id, snap = false) {
+  focusId = id;
+  if (!id) {
+    camTarget = { x: 0, y: 0, z: 1 };
+  } else {
+    const b = focusBounds(id);
+    // visible area: below the header and focus bar, above the legend; extra side room for labels
+    const top = 110, bottom = H - 40, side = isCompact() ? 24 : 120;
+    const z = Math.min((W - side * 2) / ((b.x1 - b.x0) * R), (bottom - top) / ((b.y1 - b.y0) * R), 3.2);
+    const midY = (top + bottom) / 2;
+    camTarget = {
+      x: (b.x0 + b.x1) / 2,
+      y: (b.y0 + b.y1) / 2 - (midY - CY) / (R * z),
+      z: Math.max(1, z),
+    };
+  }
+  if (snap) Object.assign(cam, camTarget);
+  updateFocusUI();
+}
+
+function updateFocusUI() {
+  const bar = document.getElementById('focusbar');
+  if (!bar) return;
+  const cat = CATEGORIES.find(c => c.id === focusId);
+  bar.hidden = !cat;
+  if (cat) {
+    const n = state.attachments.filter(a => a.category === cat.id).length;
+    document.getElementById('focus-title').innerHTML =
+      `<em style="color:${cat.color}">${cat.pali}</em> ${cat.label} · ${n}`;
+  }
+  const tip = document.querySelector('#legend .tip');
+  if (tip) {
+    tip.textContent = focusId ? 'drag an attachment to move it'
+      : isCompact() ? 'tap a kind to zoom in'
+      : 'click a cord to zoom in · drag to move';
+  }
+}
+
+// Which quadrant (cord) a screen point falls in, measured around the I.
+function quadrantAt(px, py) {
+  const ang = Math.atan2(py - sy(0), px - sx(0));
+  const sector = (Math.PI * 2) / CATEGORIES.length;
+  const i = Math.floor((((ang + Math.PI / 2) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) / sector);
+  return CATEGORIES[i].id;
 }
 
 // A faint, static background web — the wider mycelium beyond what we've named.
@@ -291,8 +363,8 @@ function paintSoil() {
   }
 }
 
-const sx = x => CX + x * R;
-const sy = y => CY + y * R;
+const sx = x => CX + (x - cam.x) * R * cam.z;
+const sy = y => CY + (y - cam.y) * R * cam.z;
 
 function strokePartial(pts, frac, w0, w1, color) {
   const n = pts.length - 1;
@@ -321,6 +393,7 @@ function rgba(hex, a) {
 }
 
 let hitNodes = [];
+let cordLabelRects = [];
 let centerR = 30;
 
 function frame(now) {
@@ -329,7 +402,14 @@ function frame(now) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
+  // ease the camera toward its target
+  for (const k of ['x', 'y', 'z']) cam[k] += (camTarget[k] - cam[k]) * 0.14;
+  const lw = Math.sqrt(cam.z); // lines thicken a little when zoomed in
+  const compactOverview = !showDetail();
+  const dimFor = id => (focusId && focusId !== id ? 0.1 : 1);
+
   hitNodes = [];
+  cordLabelRects = [];
   const secs = now / 1000;
 
   // main cords: thicker the more attachments (still held) feed them
@@ -339,34 +419,43 @@ function frame(now) {
     const cat = CATEGORIES.find(c => c.id === cord.id);
     const held = state.attachments.filter(a => a.category === cord.id && !a.released);
     const weight = held.reduce((s, a) => s + a.strength, 0);
-    const w = 1.6 + Math.min(7, weight * 0.35);
-    const alpha = held.length ? 0.55 : 0.22;
+    const w = (1.6 + Math.min(7, weight * 0.35)) * lw;
+    const alpha = (held.length ? 0.55 : 0.22) * dimFor(cord.id);
     for (const b of cord.branches) {
       const bf = Math.max(0, Math.min(1, (cordEase - b.at) / 0.25));
       if (bf > 0) strokePartial(b.pts, bf, 0.8 / b.depth, 0.25, rgba(cat.color, alpha * 0.4));
     }
     strokePartial(cord.main, cordEase, w, Math.max(0.8, w * 0.25), rgba(cat.color, alpha));
 
-    // label at the cord's tip
-    if (cordGrow > 0.6) {
-      const fade = (cordGrow - 0.6) / 0.4;
+    // label at the cord's tip (overview only; the focus bar names the cord when zoomed)
+    const labelFade = Math.max(0, 1 - (cam.z - 1) * 2);
+    if (cordGrow > 0.6 && labelFade > 0) {
+      const fade = ((cordGrow - 0.6) / 0.4) * labelFade;
       const tip = cord.main[cord.main.length - 1];
       const right = Math.cos(cord.angle) > 0;
+      const down = Math.sin(cord.angle) > 0;
+      const small = isCompact();
+      const paliPx = small ? 13 : 15, subPx = small ? 11 : 12;
+      const count = state.attachments.filter(a => a.category === cord.id).length;
+      const sub = small && count ? `${cat.label} · ${count}` : cat.label;
       const y = sy(tip[1]) + Math.sin(cord.angle) * 10;
-      ctx.font = '12px "Iowan Old Style", Palatino, Georgia, serif';
-      const textW = Math.max(ctx.measureText(cat.label).width, cat.pali.length * 8);
+      ctx.font = `${subPx}px "Iowan Old Style", Palatino, Georgia, serif`;
+      const textW = Math.max(ctx.measureText(sub).width, cat.pali.length * paliPx * 0.53);
       // keep the label on screen on narrow windows
       let x = sx(tip[0]) + Math.cos(cord.angle) * 10;
       x = right ? Math.min(x, W - 12 - textW) : Math.max(x, 12 + textW);
       ctx.textAlign = right ? 'left' : 'right';
-      ctx.textBaseline = Math.sin(cord.angle) > 0 ? 'top' : 'bottom';
-      const dy = Math.sin(cord.angle) > 0 ? 0 : -16;
-      ctx.font = 'italic 15px "Iowan Old Style", Palatino, Georgia, serif';
+      ctx.textBaseline = down ? 'top' : 'bottom';
+      const dy = down ? 0 : -(subPx + 4);
+      ctx.font = `italic ${paliPx}px "Iowan Old Style", Palatino, Georgia, serif`;
       ctx.fillStyle = rgba(cat.color, 0.85 * fade);
       ctx.fillText(cat.pali, x, y + dy);
-      ctx.font = '12px "Iowan Old Style", Palatino, Georgia, serif';
+      ctx.font = `${subPx}px "Iowan Old Style", Palatino, Georgia, serif`;
       ctx.fillStyle = `rgba(154,144,127,${fade})`;
-      ctx.fillText(cat.label, x, y + dy + 17);
+      ctx.fillText(sub, x, y + dy + paliPx + 2);
+      // clickable area for zooming into this cord
+      const top = down ? y + dy : y + dy - paliPx;
+      cordLabelRects.push({ id: cord.id, x0: right ? x : x - textW, x1: right ? x + textW : x, y0: top - 4, y1: top + paliPx + subPx + 10 });
     }
   }
 
@@ -376,9 +465,11 @@ function frame(now) {
     const grow = Math.min(1, (now - h.born) / GROW_MS);
     const ease = 1 - Math.pow(1 - grow, 3);
     const focus = a.id === selectedId || a.id === hoverId;
-    const alpha = a.released ? 0.18 : focus ? 0.95 : 0.6;
+    const inView = dimFor(a.category) === 1;
+    const dim = dimFor(a.category) * (compactOverview ? 0.7 : 1);
+    const alpha = (a.released ? 0.18 : focus ? 0.95 : 0.6) * dim;
     const color = a.released ? `rgba(160,150,135,${alpha})` : rgba(cat.color, alpha);
-    const thick = 0.6 + a.strength * 0.7;
+    const thick = (0.6 + a.strength * 0.7) * (compactOverview ? 0.6 : lw);
 
     // side branches
     for (const b of h.branches) {
@@ -409,7 +500,9 @@ function frame(now) {
       const appear = (grow - 0.85) / 0.15;
       const [tx, ty] = h.target;
       const x = sx(tx), y = sy(ty);
-      const r = (5 + a.strength * 1.6) * appear;
+      // small, quiet dots in the phone overview; full size when zoomed in or on a large screen
+      const r = (5 + a.strength * 1.6) * appear * (compactOverview ? 0.45 : focusId ? 1.1 : 1);
+      ctx.globalAlpha = dim;
       const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
       glow.addColorStop(0, a.released ? 'rgba(160,150,135,0.15)' : rgba(cat.color, focus ? 0.45 : 0.25));
       glow.addColorStop(1, 'rgba(0,0,0,0)');
@@ -422,6 +515,10 @@ function frame(now) {
       ctx.strokeStyle = a.released ? 'rgba(160,150,135,0.5)' : rgba(cat.color, 1);
       ctx.lineWidth = a.tone === 'aversion' && !a.released ? 2.4 : 1.2;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // only attachments in view and shown in detail get labels and can be clicked
+      if (!inView || compactOverview) continue;
 
       // label, pushed outward from the centre
       const ang = Math.atan2(ty, tx);
@@ -450,22 +547,23 @@ function frame(now) {
   // the self, breathing slowly at the centre
   const breath = 0.5 + 0.5 * Math.sin((secs / BREATH_S) * Math.PI * 2);
   centerR = Math.max(22, R * 0.07) * (1 + 0.07 * breath);
-  const halo = ctx.createRadialGradient(CX, CY, 0, CX, CY, centerR * 3.2);
+  const ix = sx(0), iy = sy(0);
+  const halo = ctx.createRadialGradient(ix, iy, 0, ix, iy, centerR * 3.2);
   halo.addColorStop(0, `rgba(240, 225, 190, ${0.22 + 0.1 * breath})`);
   halo.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = halo;
-  ctx.beginPath(); ctx.arc(CX, CY, centerR * 3.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ix, iy, centerR * 3.2, 0, Math.PI * 2); ctx.fill();
 
   ctx.fillStyle = '#1e1a14';
   ctx.strokeStyle = 'rgba(232, 217, 176, 0.8)';
   ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(CX, CY, centerR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(ix, iy, centerR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
   ctx.fillStyle = '#e8d9b0';
   ctx.font = `${Math.round(centerR * 1.1)}px "Iowan Old Style", Palatino, Georgia, serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('I', CX, CY + 1);
+  ctx.fillText('I', ix, iy + 1);
 
   requestAnimationFrame(frame);
 }
@@ -479,7 +577,21 @@ function hitTest(x, y) {
     if (d < n.r + 8 && d < bd) { best = n; bd = d; }
   }
   if (best) return { type: 'node', id: best.id };
-  if (Math.hypot(CX - x, CY - y) < centerR + 4) return { type: 'self' };
+  if (Math.hypot(sx(0) - x, sy(0) - y) < centerR + 4) return { type: 'self' };
+  if (!focusId) {
+    // On a phone, a tap anywhere in a quadrant zooms into that kind of attachment.
+    if (isCompact()) return { type: 'cord', id: quadrantAt(x, y) };
+    // On a larger screen, click a cord or its label.
+    for (const r of cordLabelRects) {
+      if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return { type: 'cord', id: r.id };
+    }
+    for (const cord of cords) {
+      for (let i = 2; i < cord.main.length; i++) {
+        const [px, py] = cord.main[i];
+        if (Math.hypot(sx(px) - x, sy(py) - y) < 12) return { type: 'cord', id: cord.id };
+      }
+    }
+  }
   return null;
 }
 
@@ -489,14 +601,15 @@ const DRAG_THRESHOLD = 4;
 
 // Screen point → field units, kept clear of the I and inside the visible window.
 function toUnits(px, py) {
-  let x = (px - CX) / R, y = (py - CY) / R;
-  const minR = (centerR + 16) / R, d = Math.hypot(x, y);
+  const s = R * cam.z;
+  px = Math.max(24, Math.min(W - 24, px));
+  py = Math.max(focusId ? 110 : 70, Math.min(H - 24, py));
+  let x = cam.x + (px - CX) / s, y = cam.y + (py - CY) / s;
+  const minR = (centerR + 16) / s, d = Math.hypot(x, y);
   if (d < minR) {
     const k = minR / (d || 1);
     x = d ? x * k : minR; y *= k;
   }
-  x = Math.max((24 - CX) / R, Math.min((W - 24 - CX) / R, x));
-  y = Math.max((70 - CY) / R, Math.min((H - 24 - CY) / R, y));
   return roundPos([x, y]);
 }
 
@@ -519,6 +632,7 @@ canvas.addEventListener('pointermove', e => {
     canvas.style.cursor = 'grabbing';
     return;
   }
+  if (e.pointerType !== 'mouse') return; // hover only matters for a mouse
   const hit = hitTest(e.clientX, e.clientY);
   hoverId = hit?.type === 'node' ? hit.id : null;
   canvas.style.cursor = hit?.type === 'node' ? 'grab' : hit ? 'pointer' : 'default';
@@ -529,12 +643,14 @@ canvas.addEventListener('pointerup', e => {
     const { id, moved } = drag;
     drag = null;
     canvas.style.cursor = 'grab';
-    if (moved) return save();
+    if (moved) { save(); if (focusId) setFocus(focusId); return; }
     return openEdit(id);
   }
   const hit = hitTest(e.clientX, e.clientY);
-  if (!hit) closePanel();
-  else if (hit.type === 'self') openNew();
+  if (hit?.type === 'self') openNew(focusId);
+  else if (hit?.type === 'cord') { closePanel(); setFocus(hit.id); }
+  else if (!panel.hidden) closePanel();
+  else if (focusId) setFocus(null); // tap empty space to zoom back out
 });
 
 canvas.addEventListener('pointercancel', () => {
@@ -571,12 +687,14 @@ const setTone = t => { document.querySelector(`input[name=tone][value=${t === 'a
 const showStrength = () => { $('f-strength-out').textContent = `— ${STRENGTH_WORDS[$('f-strength').value]}`; };
 $('f-strength').addEventListener('input', showStrength);
 
-function openNew() {
+// Start naming a new attachment, optionally preset to a kind (the cord we're zoomed into).
+function openNew(category = null) {
   selectedId = null;
   $('panel-title').textContent = 'Name an attachment';
   $('f-save').textContent = 'Let it grow';
   $('form').reset();
   $('f-strength').value = 3;
+  if (category) $('f-category').value = category;
   showStrength();
   showCategory();
   setTone('craving');
@@ -696,8 +814,13 @@ $('btn-delete').addEventListener('click', () => {
 });
 
 $('panel-close').addEventListener('click', closePanel);
-$('btn-add').addEventListener('click', openNew);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+$('btn-add').addEventListener('click', () => openNew(focusId));
+$('btn-back').addEventListener('click', () => { closePanel(); setFocus(null); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!panel.hidden) closePanel();
+  else if (focusId) setFocus(null);
+});
 
 // ---------- export / import ----------
 
@@ -733,6 +856,8 @@ $('file-import').addEventListener('change', async e => {
 
 function updateHint() {
   $('hint').hidden = state.attachments.length > 0;
+  // attachments changed: refit the zoomed view and refresh the count
+  if (focusId) setFocus(focusId); else updateFocusUI();
 }
 
 state.attachments.forEach(a => { a.fresh = true; }); // grow everything in on open

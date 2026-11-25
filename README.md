@@ -24,6 +24,10 @@ It also has a **tone**: craving (a filled node) or aversion (a hollow ring).
 
 - **Name an attachment.** Click the **I** or "+ Name an attachment". Choose its kind, form, tone, and how tightly it is held.
   Tighter attachments sit closer to the self and grow thicker hyphae.
+- **Zoom into a kind.** Click a cord or its label to zoom into that kind of attachment.
+  On a phone, tap anywhere in its quadrant. "← All four", Escape, or tapping empty space zooms back out.
+  Tapping the I while zoomed in names a new attachment of that kind.
+  On phones, the overview stays quiet (small dots, no labels, a count per cord), and the detail lives in the zoomed view.
 - **Move it.** Drag any attachment to place it where it feels right. Its coordinates are saved,
   and changing its tightness later slides it toward or away from the I in the same direction.
 - **Notice it.** Click an attachment, then "I noticed it" each time it arises in practice.

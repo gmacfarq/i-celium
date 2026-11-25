@@ -10,7 +10,7 @@
   <header>
     <h1>I-celium</h1>
     <div class="actions">
-      <button id="btn-add" class="primary">+ Name an attachment</button>
+      <button id="btn-add" class="primary">+ <span class="long">Name an attachment</span><span class="short">Add</span></button>
       <button id="btn-export" title="Save your map as a JSON file">Export</button>
       <label class="button" title="Load a map from a JSON file">Import
         <input id="file-import" type="file" accept="application/json" hidden>
@@ -19,6 +19,10 @@
   </header>
 
   <canvas id="field"></canvas>
+  <div id="focusbar" hidden>
+    <button id="btn-back">← All four</button>
+    <span id="focus-title"></span>
+  </div>
   <div id="legend"></div>
   <div id="hint">Click the <strong>I</strong> to name the first thing you hold onto.<br>Each kind of attachment has its own cord.</div>
 
