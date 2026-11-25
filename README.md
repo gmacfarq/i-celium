@@ -1,5 +1,7 @@
 # I-celium
 
+**Live:** https://gmacfarq.github.io/i-celium/
+
 A meditation companion for observing attachments and cataloguing them as a living
 mycelium. **I**, the self, sits at the centre; each attachment grows out of it as a hypha.
 
