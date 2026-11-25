@@ -693,7 +693,7 @@ $('f-strength').addEventListener('input', showStrength);
 function openNew(category = null) {
   selectedId = null;
   $('panel-title').textContent = 'Name an attachment';
-  $('f-save').textContent = 'Let it grow';
+  $('f-save').textContent = 'Observe it';
   $('form').reset();
   $('f-strength').value = 3;
   if (category) $('f-category').value = category;
